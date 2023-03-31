@@ -201,6 +201,31 @@ void WeightedDistanceDetector<Weight, Graph>::printSolution(std::ostream& write_
 }
 
 template<typename Weight, typename Graph>
+void WeightedDistanceDetector<Weight, Graph>::DistanceOp::analyzeReason0(bool compareOver, Comparison op, Weight to,
+                                                                        vec<Lit>& conflict){
+//watch out - might need to backtrack the graph theory appropriately, here...
+    GraphTheorySolver<Weight>::GraphTheoryOp::analyzeReason(compareOver, op, to, conflict);
+    if(!compareOver){
+        Lit l = this->comparisonLit;
+        assert(outer->outer->value(l) == l_True);
+
+        conflict.push(outer->outer->toSolver(~l));
+        assert(op == Comparison::gt || op == Comparison::geq);
+        assert(this->strictCompare == (op == Comparison::gt));
+        outer->analyzeDistanceGTReason(this->to, to, conflict, strictCompare);
+    }else{
+        Lit l = this->comparisonLit;
+        assert(outer->outer->value(l) == l_False);
+        conflict.push(outer->outer->toSolver(l));
+        assert(op == Comparison::lt || op == Comparison::leq);
+        assert(this->strictCompare == (op == Comparison::lt));
+        outer->analyzeDistanceLEQReason(this->to, to, conflict, strictCompare);
+
+    }
+    GraphTheorySolver<Weight>::GraphTheoryOp::completeAnalysis();
+}
+
+template<typename Weight, typename Graph>
 void WeightedDistanceDetector<Weight, Graph>::DistanceOp::analyzeReason(bool compareOver, Comparison op, Weight to,
                                                                         vec<Lit>& conflict){
 //watch out - might need to backtrack the graph theory appropriately, here...
@@ -255,7 +280,7 @@ void WeightedDistanceDetector<Weight, Graph>::analyzeDistanceLEQReason(int to, W
             Var e = outer->getEdgeVar(edgeID);
             lbool val = outer->value(e);
             assert(outer->value(e) == l_True);
-            if(!g_under.isConstant(edgeID))
+            if(!g_under.isConstant(edgeID) || (proof_support))
                 conflict.push(outer->toSolver(mkLit(e, true)));
             if(outer->hasBitVector(edgeID)){
 
@@ -313,6 +338,11 @@ void WeightedDistanceDetector<Weight, Graph>::analyzeDistanceGTReason(int to, We
                 Lit l = mkLit(outer->getEdgeVar(edgeID), false);
                 assert(outer->value(l) == l_False);
                 conflict.push(outer->toSolver(l));
+            }else{
+                if (proof_support){
+                    Lit l = mkLit(outer->getEdgeVar(edgeID), false);
+                    conflict.push(outer->toSolver(l));
+                }
             }
         }
 
@@ -375,6 +405,10 @@ void WeightedDistanceDetector<Weight, Graph>::analyzeDistanceGTReason(int to, We
                     //if we are already planning on visiting the from node, then we don't need to include it in the conflict (is this correct?)
                     if(!g_over.isConstant(edge_num)){
                         conflict.push(outer->toSolver(mkLit(edge_enabled)));
+                    }else{
+                        if (proof_support){
+                            conflict.push(outer->toSolver(mkLit(edge_enabled)));
+                        }
                     }
                 }else{
 

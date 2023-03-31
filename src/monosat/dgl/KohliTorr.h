@@ -1069,9 +1069,74 @@ private:
     }
 
     std::vector<int> Q;
-
+    
 public:
 
+    const Weight minCut(std::vector<MaxFlowEdge>& cut, std::vector<int>& reasons) override{
+        if(same_source_sink)
+            return INF;
+        Weight f = this->maxFlow();
+        calc_flow();//it is critical to ensure that the flow assignment is up to date, or else the identified cut may be inaccurate
+        int s = source;
+        int t = sink;
+
+        if(g.outfile()){
+            fprintf(g.outfile(), "m %d %d\n", s, t);
+            fflush(g.outfile());
+        }
+
+        cut.clear();
+        //dbg_print_graph(s, t);
+        /*   	if(f==0)
+         return 0;*/
+
+        auto SOURCE = kohli_torr::Graph<Weight, Weight, Weight>::SOURCE; // backward_maxflow? kohli_torr::Graph<Weight,Weight,Weight>::SINK : kohli_torr::Graph<Weight,Weight,Weight>::SOURCE;
+        auto SINK = kohli_torr::Graph<Weight, Weight, Weight>::SINK; //backward_maxflow? kohli_torr::Graph<Weight,Weight,Weight>::SOURCE :  kohli_torr::Graph<Weight,Weight,Weight>::SINK;
+
+        //KT allows for all the nodes to be source or sink, if the cut is placed at the final source->'outer source' or 'outer sink' -> sink edge.
+        //Ideally, this shouldn't happen here, because those should have infinite weight edges.
+        if(kt->what_segment(s, SOURCE) == SINK){
+            throw std::logic_error("Error in mincut analysis");
+        }else if(kt->what_segment(t, SOURCE) == SOURCE){
+            throw std::logic_error("Error in mincut analysis");
+        }
+
+        for(int n = 0; n < g.nodes(); n++){
+            auto t = kt->what_segment(n, SINK);
+            if(t == SINK){
+                //check to see if any neighbouring edges are in the source segment.
+                for(int i = 0; i < g.nIncoming(n); i++){
+                    //any edge that crosses from the source side into the sink side is on the cut.
+                    auto& e = g.incoming(n, i);
+                    
+                    auto segment = kt->what_segment(e.node, SINK);
+                    if(segment == SOURCE){
+                        if(g.edgeEnabled(e.id)){
+                            Weight fe = g.getWeight(e.id);
+                            //then this edge is on the cut
+                            cut.push_back(MaxFlowEdge{n, e.node, e.id});
+                        }else{
+                            reasons.push_back(e.id);
+                        }
+                    }
+                
+                }
+            }
+        }
+        
+#ifdef DEBUG_DGL
+        Weight dbg_sum = 0;
+        for (int i = 0; i < cut.size(); i++) {
+            int id = cut[i].id;
+            bassert(getEdgeFlow(id) == g.getWeight(id));
+            dbg_sum += getEdgeFlow(id);
+        }
+        bassert(dbg_sum == f);
+#endif
+
+        return f;
+    }
+    
     const Weight minCut(std::vector<MaxFlowEdge>& cut) override{
         if(same_source_sink)
             return INF;
@@ -1120,54 +1185,6 @@ public:
             }
         }
 
-        //kohli-torr is unusual in that it maintains the _mincut_, explicitly.
-
-        /*calc_flow();
-         cut.clear();
-         Q.clear();
-         Q.push_back(s);
-         seen.clear();
-         seen.resize(g.nodes());
-         seen[s]=true;
-         //
-         //explore the residual graph
-         for(int j = 0;j<Q.size();j++){
-         int u = Q[j];
-
-         for(int i = 0;i<g.nIncident(u);i++){
-         if(!g.edgeEnabled(g.incident(u,i).id))
-         continue;
-         int v = g.incident(u,i).node;
-         int id = g.incident(u,i).id;
-         if(getEdgeResidualCapacity(id) == 0){
-         cut.push_back(MaxFlowEdge{u,v,id});//potential element of the cut
-         }else if(!seen[v]){
-         Q.push_back(v);
-         seen[v]=true;
-         }
-         }
-         for(int i = 0;i<g.nIncoming(u);i++){
-         if(!g.edgeEnabled(g.incoming(u,i).id))
-         continue;
-         int v = g.incoming(u,i).node;
-         int id = g.incoming(u,i).id;
-         if(getEdgeFlow(id) == 0){
-
-         }else if(!seen[v]){
-         Q.push_back(v);
-         seen[v]=true;
-         }
-         }
-         }
-         //Now keep only the edges from a seen vertex to an unseen vertex
-         int i, j = 0;
-         for( i = 0;i<cut.size();i++){
-         if(!seen[cut[i].v] && seen[cut[i].u]){
-         cut[j++]=cut[i];
-         }
-         }
-         cut.resize(j);
-         */
 #ifdef DEBUG_DGL
         Weight dbg_sum = 0;
         for (int i = 0; i < cut.size(); i++) {

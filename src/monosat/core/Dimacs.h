@@ -281,6 +281,64 @@ private:
     int line_num = 0;
     int solves = 0;
 
+    bool verify_(B& in, Solver& S ){
+        vec<Lit> lits;
+        if(opt_remap_vars){
+            S.setVarMap(this);
+        }
+        S.cancelUntil(0);
+        bool verified = false;
+        vec<char> linebuf;
+        int verified_num = 0;
+        try{
+            while(1){
+                skipWhitespace(in);
+                if(*in == EOF){
+                    verified = true;
+                    break;
+                }
+                 //Typically, 99% of lines are either comments or clauses, and so it makes a lot of sense to handle these first, and before reading the whole line into a buffer.
+                if(*in == 't'){
+                    ++in;
+                    //this is a clause
+                    clause_count++;
+                    readClause(in, S, lits);
+                    bool checkres = S.checkClauseRedundancy(lits);
+                    if (!checkres){
+                        printf("c theory lemmas verification failed: \n");
+                        for (Lit l: lits){
+                            printf("%d ", dimacs(unmap(l)));
+                        }
+                        printf("\n");
+                        printf("c verified %d: \n", verified_num);
+                        exit(1);
+                    }
+                    verified_num ++;
+                    continue;
+                }
+                else{
+                    skipLine(in);
+                    continue;//comment
+                }
+            }
+        }catch(const parse_error& e){
+            std::stringstream ss;
+            ss << "PARSE ERROR in DIMACS parser at line " << line_num << "; ";
+            ss << e.what();
+            throw parse_error(ss.str());
+        }catch(const std::exception& e){
+            std::stringstream ss;
+            ss << "PARSE ERROR in DIMACS parser at line " << line_num << "; ";
+            ss << e.what();
+            throw parse_error(ss.str());
+        }catch(...){
+            std::stringstream ss;
+            ss << "PARSE ERROR in DIMACS parser at line " << line_num << "; (Unknown Error)";
+            throw parse_error(ss.str());
+        }
+        return verified;
+    }
+
     bool parse_(B& in, Solver& S){
         vec<Lit> lits;
         if(opt_remap_vars){
@@ -302,6 +360,9 @@ private:
                     //this is a clause
                     clause_count++;
                     readClause(in, S, lits);
+                    // if (S.add_cnf){
+                    //     S.addRawClause(lits);
+                    // }
                     S.addClause_(lits);
                     continue;
                 }
@@ -543,6 +604,10 @@ public:
 	}*/
     bool parse(StreamBuffer& in, Solver& S){
         return parse_(in, S);
+    }
+
+    bool verify(StreamBuffer& in, Solver& S){
+        return verify_(in, S);
     }
 };
 };

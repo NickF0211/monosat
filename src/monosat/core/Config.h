@@ -77,11 +77,17 @@ extern IntOption opt_clausify_amo;
 extern BoolOption opt_amo_eager_prop;
 
 extern StringOption opt_debug_learnt_clauses;
+extern StringOption opt_proof_support;
+extern StringOption opt_drup_file;
+extern StringOption opt_cnf_file;
 extern BoolOption opt_debug_model;
 extern int64_t opt_n_learnts;
 extern BoolOption opt_write_bv_bounds;
 extern BoolOption opt_write_bv_analysis;
 extern FILE* opt_write_learnt_clauses;
+extern FILE* proof_support;
+extern FILE* drup_file;
+extern FILE* cnf_file;
 
 //extern StringOption opt_fsm_model;
 

@@ -139,6 +139,10 @@ void CycleDetector<Weight, Graph>::buildUndirectedCycleReason(vec<Lit>& conflict
     std::vector<int>& cycle = underapprox_undirected_cycle_detector->getUndirectedCycle();
     for(int i = 0; i < cycle.size(); i++){
         int edgeID = cycle[i];
+        if (proof_support){
+            int from = g_under.getEdge(edgeID).from;
+            fprintf(proof_support, "%d ", from);
+        }
         Lit l = mkLit(outer->getEdgeVar(edgeID), false);
         assert(outer->value(l) == l_True);
         conflict.push(~l);
@@ -154,6 +158,10 @@ void CycleDetector<Weight, Graph>::buildDirectedCycleReason(vec<Lit>& conflict){
 
     for(int i = 0; i < cycle.size(); i++){
         int edgeID = cycle[i];
+        if (proof_support){
+            int from = g_under.getEdge(edgeID).from;
+            fprintf(proof_support, "%d ", from);
+        }
         Lit l = mkLit(outer->getEdgeVar(edgeID), false);
         assert(outer->value(l) == l_True);
         conflict.push(~l);
@@ -168,6 +176,7 @@ void CycleDetector<Weight, Graph>::buildReason(Lit p, vec<Lit>& reason, CRef mar
         reason.push(p);
 
         buildDirectedCycleReason(reason);
+        //recordWitness(reason, p);
 
     }else if(marker == no_directed_cycle_marker){
         reason.push(p);
@@ -178,6 +187,7 @@ void CycleDetector<Weight, Graph>::buildReason(Lit p, vec<Lit>& reason, CRef mar
         reason.push(p);
 
         buildUndirectedCycleReason(reason);
+        //recordWitness(reason, p);
 
     }else if(marker == no_undirected_cycle_marker){
         reason.push(p);
@@ -207,6 +217,7 @@ bool CycleDetector<Weight, Graph>::propagate(vec<Lit>& conflict){
                 conflict.push(l);
                 buildDirectedCycleReason(conflict);
                 outer->toSolver(conflict);
+                //recordWitness(conflict, l);
                 return false;
             }
         }else if(outer->value(directed_acyclic_lit) != l_True &&
@@ -242,6 +253,7 @@ bool CycleDetector<Weight, Graph>::propagate(vec<Lit>& conflict){
                 conflict.push(l);
                 buildUndirectedCycleReason(conflict);
                 outer->toSolver(conflict);
+                //recordWitness(conflict, l);
                 return false;
             }
         }else if(outer->value(undirected_acyclic_lit) != l_True &&

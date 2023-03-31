@@ -122,6 +122,8 @@ public:
     double stats_fast_update_time = 0;
     Heuristic* conflictingHeuristic = nullptr;
 
+    std::vector<int> ignore_edge_id;
+    
     Heuristic* getConflictingHeuristic() override{
         return conflictingHeuristic;
     }
@@ -300,7 +302,11 @@ public:
 
     bool propagate(vec<Lit>& conflict) override;
 
+    bool verifyReachReason(int node, vec<Lit>& conflict);
+
     void buildReachReason(int node, vec<Lit>& conflict);
+
+    bool verifyNonReachReason(int node, vec<Lit>& conflict);
 
     void buildNonReachReason(int node, vec<Lit>& conflict, bool force_maxflow = false);
 

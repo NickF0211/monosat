@@ -494,6 +494,24 @@ Monosat::SimpSolver* newSolver_args(int argc, char** argv){
     }else{
         opt_write_learnt_clauses = nullptr;
     }
+
+    if(strlen(opt_proof_support) > 0){
+        proof_support = fopen(opt_proof_support, "w");
+    }else{
+        proof_support = nullptr;
+    }
+    if(strlen(opt_drup_file) > 0){
+        drup_file = fopen(opt_drup_file, "w");
+    }else{
+        drup_file = nullptr;
+    }
+
+    if(strlen(opt_cnf_file) > 0){
+        cnf_file = fopen(opt_cnf_file, "w");
+    }else{
+        cnf_file = nullptr;
+    }
+    
     _selectAlgorithms();
     Monosat::SimpSolver* S = new Monosat::SimpSolver();
     solvers.insert(S);//add S to the list of solvers handled by signals
@@ -985,6 +1003,9 @@ int _solve(Monosat::SimpSolver* S, int* assumptions, int n_assumptions){
     d->last_solution_optimal = found_optimal;
     if(r == l_False){
         d->has_conflict_clause_from_last_solution = true;
+         if (drup_file){
+                fprintf(drup_file, "0\n");
+        }
     }
     if(opt_verb >= 1){
         printStats(S);

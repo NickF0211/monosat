@@ -97,6 +97,18 @@ public:
             return undirected_acyclic_lit != lit_Undef;
         }
     }
+    
+    void recordWitness(vec<Lit>& conflict, Lit l){
+        //include edges contain non-zero flows
+        if (proof_support){
+            fprintf(proof_support, "%i ", dimacs(outer->unmap(outer->toSolver(l))));
+            fprintf(proof_support, "0 ");
+            fprintf(proof_support, "AC witness ");
+            for (int i = 0; i < conflict.size(); i++)
+                fprintf(proof_support, "%i ", dimacs(outer->unmap(conflict[i])));
+            fprintf(proof_support, "0\n");
+        }
+    }
 
     CycleDetector(int _detectorID, GraphTheorySolver<Weight>* _outer, Graph& _g, Graph& _antig,
                   bool detect_directed_cycles = true,
@@ -114,6 +126,8 @@ public:
             delete overapprox_directed_cycle_detector;
 
     }
+
+    
 
     std::string getName() override{
         return "Cycle Detector";

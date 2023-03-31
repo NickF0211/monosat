@@ -1141,6 +1141,54 @@ void ReachDetector<Weight, Graph>::preprocess(){
 }
 
 template<typename Weight, typename Graph>
+bool ReachDetector<Weight, Graph>::verifyReachReason(int node, vec<Lit>& conflict){
+    int u = node;
+    to_visit.clear();
+    to_visit.push(node);
+    seen.clear();
+    seen.growTo(outer->nNodes());
+    seen[node] = true;
+    outer->add_verify_value(conflict);
+
+    do{
+
+        assert(to_visit.size());
+        int u = to_visit.last();
+        assert(u != source);
+        to_visit.pop();
+        assert(seen[u]);
+        //assert(!negative_reach_detector->connected_unsafe(u));
+        //Ok, then add all its incoming disabled edges to the cut, and visit any unseen, non-disabled incoming.edges()
+        for (int i = 0; i < g_over.nIncoming(u); i++){
+            int v = outer->getEdgeVar(g_over.incoming(u, i).id);
+            int from = g_over.incoming(u, i).node;
+            int edge_num = outer->getEdgeID(v);                        // v-outer->min_edge_var;
+            if(from == u){
+                assert(g_over.getEdge(edge_num).to == u);
+                assert(g_over.getEdge(edge_num).from == u);
+                continue;                  //Self loops are allowed, but just make sure nothing got flipped around...
+            }
+            
+            //if source is reached, verification failed
+
+            if(outer->value_verify(v) == l_True){
+                if (source == from){
+                    outer->clear_verify_value(conflict);
+                    return true;
+                }
+                //even if it is undef? probably...
+                if(!seen[from]){
+                    seen[from] = true;
+                    to_visit.push(from);
+                }
+            }
+        }
+    }while(to_visit.size());
+    outer->clear_verify_value(conflict);
+    return false;
+}
+
+template<typename Weight, typename Graph>
 void ReachDetector<Weight, Graph>::buildReachReason(int node, vec<Lit>& conflict){
     //drawFull();
     Reach& d = *underapprox_path_detector;
@@ -1194,6 +1242,54 @@ void ReachDetector<Weight, Graph>::buildReachReason(int node, vec<Lit>& conflict
 }
 
 template<typename Weight, typename Graph>
+bool ReachDetector<Weight, Graph>::verifyNonReachReason(int node, vec<Lit>& conflict){
+    int u = node;
+    to_visit.clear();
+    to_visit.push(node);
+    seen.clear();
+    seen.growTo(outer->nNodes());
+    seen[node] = true;
+    outer->add_verify_value(conflict);
+
+    do{
+
+        assert(to_visit.size());
+        int u = to_visit.last();
+        assert(u != source);
+        to_visit.pop();
+        assert(seen[u]);
+        //assert(!negative_reach_detector->connected_unsafe(u));
+        //Ok, then add all its incoming disabled edges to the cut, and visit any unseen, non-disabled incoming.edges()
+        for (int i = 0; i < g_over.nIncoming(u); i++){
+            int v = outer->getEdgeVar(g_over.incoming(u, i).id);
+            int from = g_over.incoming(u, i).node;
+            int edge_num = outer->getEdgeID(v);                        // v-outer->min_edge_var;
+            if(from == u){
+                assert(g_over.getEdge(edge_num).to == u);
+                assert(g_over.getEdge(edge_num).from == u);
+                continue;                  //Self loops are allowed, but just make sure nothing got flipped around...
+            }
+            
+            //if source is reached, verification failed
+
+            if(outer->value_verify(v) != l_False){
+                if (source == from){
+                    outer->clear_verify_value(conflict);
+                    return false;
+                }
+                //even if it is undef? probably...
+                if(!seen[from]){
+                    seen[from] = true;
+                    to_visit.push(from);
+                }
+            }
+        }
+    }while(to_visit.size());
+    outer->clear_verify_value(conflict);
+    return true;
+}
+
+template<typename Weight, typename Graph>
 void ReachDetector<Weight, Graph>::buildNonReachReason(int node, vec<Lit>& conflict, bool force_maxflow){
 
     int u = node;
@@ -1214,6 +1310,13 @@ void ReachDetector<Weight, Graph>::buildNonReachReason(int node, vec<Lit>& confl
         }else{
             assert(conflict_flow->getSource() == source);
             conflict_flow->setSink(node);
+            
+            // if (proof_support){
+            //     ignore_edge_id.clear();
+            //     f = conflict_flow->minCut(cut, ignore_edge_id);
+            // }else{
+            //     f = conflict_flow->minCut(cut);
+            // }
             f = conflict_flow->minCut(cut);
         }
         assert(f == cut.size());                        //because edges are only ever infinity or 1
@@ -1226,6 +1329,15 @@ void ReachDetector<Weight, Graph>::buildNonReachReason(int node, vec<Lit>& confl
             assert(outer->value(l) == l_False);
             conflict.push(l);
         }
+        // if (proof_support){
+        //     for(int cut_id : ignore_edge_id){
+        //         if (outer->isvalidVar(cut_id)){
+        //             Lit l = mkLit(outer->getEdgeVar(cut_id / 2), false);
+        //             assert(outer->value(l) == l_False);
+        //             conflict.push(l);
+        //         }
+        //     }
+        // }
 
     }else{
         //We could learn an arbitrary (non-infinite) cut here, or just the whole set of false edges
@@ -1637,12 +1749,14 @@ bool ReachDetector<Weight, Graph>::propagate(vec<Lit>& conflict){
                 //conflict
                 //The reason is a path in g from to s in d
                 buildReachReason(u, conflict);
+                //bool res = verifyReachReason(u, conflict);
                 //add it to s
                 //return it as a conflict
 
             }else{
                 //The reason is a cut separating s from t
                 buildNonReachReason(u, conflict);
+                //bool res = verifyNonReachReason(u, conflict);
 
             }
 

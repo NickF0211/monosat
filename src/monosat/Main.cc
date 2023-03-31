@@ -518,6 +518,9 @@ int main(int argc, char** argv){
                                                false);
 
         IntOption opt_conflict_limit("MAIN", "conflict-limit", "", 0, IntRange(0, INT32_MAX));
+        BoolOption   drup   ("MAIN", "drup",   "Generate DRUP UNSAT proof.", false);
+        StringOption verify_lemmas("MAIN", "verify-lemmas", "A list of theory lemmas to verify", "");
+        StringOption add_cnf("MAIN", "add-cnf", "write the cnf translation", "temp.ext");
 
         parseOptions(argc, argv, true);
 
@@ -534,6 +537,19 @@ int main(int argc, char** argv){
         }else{
             opt_write_learnt_clauses = nullptr;
         }
+
+        if(strlen(opt_proof_support) > 0){
+            proof_support = fopen(opt_proof_support, "w");
+        }else{
+            proof_support = nullptr;
+        }
+
+        if(strlen(opt_cnf_file) > 0){
+            cnf_file = fopen(opt_cnf_file, "w");
+        }else{
+            cnf_file = nullptr;
+        }
+
 
         if(opt_adaptive_conflict_mincut == 1){
             opt_conflict_min_cut = true;
@@ -598,6 +614,16 @@ int main(int argc, char** argv){
 
         S.setPBSolver(new PB::PbSolver(S));
 
+        if (drup || strlen(opt_drup_file)){
+            drup_file = strlen(opt_drup_file) ? fopen(opt_drup_file, "wb") : stdout;
+            if (drup_file == NULL){
+                drup_file = stdout;
+                printf("c Error opening %s for write.\n", (const char*) opt_drup_file); }
+            printf("c DRUP proof generation: %s\n", drup_file == stdout ? "stdout" : opt_drup_file);
+        }
+
+
+
         if(opt_min_decision_var > 1 || opt_max_decision_var > 0){
             printf(
                     "Decision variables restricted to the range (%d..%d), which means a result of satisfiable may not be trustworthy.\n",
@@ -605,15 +631,21 @@ int main(int argc, char** argv){
         }
         if(!opt_pre)
             S.eliminate(true);
+        
+        S.parsing = true;
 
         gzFile in = (argc == 1) ? gzdopen(0, "rb") : gzopen(argv[1], "rb");
+
         if(in == NULL)
             printf("ERROR! Could not open file: %s\n", argc == 1 ? "<stdin>" : argv[1]), exit(1);
+
+        
 
         if(opt_verb > 0){
             printf("============================[ Problem Statistics ]=============================\n");
             printf("|                                                                             |\n");
         }
+        
 
         Dimacs<StreamBuffer, SimpSolver> parser;
         BVParser<char*, SimpSolver> bvParser;
@@ -638,7 +670,7 @@ int main(int argc, char** argv){
         parser.addParser(&amo);
 
 
-
+        
 
         // Change to signal-handlers that will only notify the solver and allow it to terminate
         // voluntarily:
@@ -675,7 +707,6 @@ int main(int argc, char** argv){
             parser.assumptions.clear();
         }
 
-
         //processPriority(S,(const char *) opt_priority);
         //processDecidable(S , (const char*) opt_decidable);
         for(Lit l:assume)
@@ -688,6 +719,7 @@ int main(int argc, char** argv){
         }
         S.preprocess();//do this _even_ if sat based preprocessing is disabled! Some of the theory solvers depend on a preprocessing call being made!
 
+        S.parsing = false;
         if(opt_pre){
             if(opt_verb > 0){
                 printf("simplify:\n");
@@ -708,6 +740,21 @@ int main(int argc, char** argv){
             S.eliminate(true);
             //in principle, should unfreeze these lits after solving...
         }
+
+        //if the verification lemma is provided, then should verify them
+        if (strlen(verify_lemmas)){
+            gzFile verify_in =  gzopen(verify_lemmas, "rb");
+            if (verify_in != NULL){
+                StreamBuffer vstrm(verify_in);
+                printf("c verify theory lemmas: %s\n", (const char*) verify_lemmas);
+                parser.verify(vstrm, S);
+                gzclose(verify_in);
+            }
+            exit(0);
+        }
+
+
+
         fflush(stdout);
         //exit(0);
         double after_preprocessing = rtime(0);
@@ -789,9 +836,21 @@ int main(int argc, char** argv){
                 printf("s SATISFIABLE\n");
         }else if(ret == l_False){
             printf("s UNSATISFIABLE\n");
+            if (drup_file){
+                // fprintf(drup_file, "0\n");
+                S.binDRUP_flush(drup_file);
+                fputc('a', drup_file); fputc(0, drup_file);
+            }
         }else{
             printf("UNKNOWN\n");
         }
+        if (drup_file && drup_file != stdout) fclose(drup_file);
+        if (proof_support) fclose(proof_support);
+        if (cnf_file) {fflush(cnf_file); fclose(cnf_file);}
+        printf("c total var nums: %d\n", S.nVars());
+        printf("c total var lemmas: %ld\n", S.lemmas);
+        printf("c total var tlemmas: %ld\n", S.theory_lemmas);
+        
         if(opt_verb > 1){
             printStats(S);
 

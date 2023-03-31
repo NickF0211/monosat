@@ -251,6 +251,13 @@ void MaxflowDetector<Weight, Graph>::analyzeMaxFlowGEQ(Weight flow, vec<Lit>& co
         for(int i = 0; i < g_under.edges(); i++){
             if(g_under.edgeEnabled(i)){
                 if(refined_flow[i] > 0){
+                    if (proof_support){
+                                fprintf(proof_support, "%d ", g_under.getEdge(i).from);
+                                fprintf(proof_support, "%d ", g_under.getEdge(i).to);
+                                std::stringstream ss;
+                                ss << refined_flow[i] << " ";
+                                fprintf(proof_support, "%s", ss.str().c_str());
+                    }
                     Var v = outer->getEdgeVar(i);
                     assert(outer->value(v) == l_True);
                     if(!g_under.isConstant(i)){
@@ -259,6 +266,9 @@ void MaxflowDetector<Weight, Graph>::analyzeMaxFlowGEQ(Weight flow, vec<Lit>& co
                     if(outer->hasBitVector(i) && !outer->getEdgeBV(i).isConst()){
                         outer->bvTheory->addAnalysis(Comparison::geq, outer->getEdgeBV(i).getID(), refined_flow[i]);
                         //outer->buildBVReason(outer->getEdgeBV(i).getID(),Comparison::geq,refined_flow[i],conflict);
+                        //reason_edges.push(g_under.getEdge(i).from);
+                        //reason_edges.push(g_under.getEdge(i).to);
+                        //reason_edges.push((int*) refined_flow[i]);
                     }
                 }
 
@@ -273,6 +283,13 @@ void MaxflowDetector<Weight, Graph>::analyzeMaxFlowGEQ(Weight flow, vec<Lit>& co
         for(int i = 0; i < g_under.edges(); i++){
             if(g_under.edgeEnabled(i)){
                 if(underapprox_conflict_detector->getEdgeFlow(i) > 0){
+                    if (proof_support){
+                                fprintf(proof_support, "%d ", g_under.getEdge(i).from);
+                                fprintf(proof_support, "%d ", g_under.getEdge(i).to);
+                                std::stringstream ss;
+                                ss << underapprox_conflict_detector->getEdgeFlow(i) << " ";
+                                fprintf(proof_support, "%s", ss.str().c_str());
+                    }
                     Var v = outer->getEdgeVar(i);
                     assert(outer->value(v) == l_True);
                     if(!g_under.isConstant(i)){
@@ -283,6 +300,9 @@ void MaxflowDetector<Weight, Graph>::analyzeMaxFlowGEQ(Weight flow, vec<Lit>& co
                                                      underapprox_conflict_detector->getEdgeFlow(i));
                         //outer->buildBVReason(outer->getEdgeBV(i).getID(),Comparison::geq,underapprox_conflict_detector->getEdgeFlow(i),conflict);
                         //outer->buildBVReason(bv.getID(),inclusive ? Comparison::gt:Comparison::geq,bv.getUnder(),conflict);
+                        //reason_edges.push(g_under.getEdge(i).from);
+                        //reason_edges.push(g_under.getEdge(i).to);
+                        //reason_edges.push(underapprox_conflict_detector->getEdgeFlow(i));
                     }
                 }
 
@@ -304,6 +324,7 @@ void MaxflowDetector<Weight, Graph>::buildMaxFlowTooHighReason(Weight flow, vec<
     if(outer->bvTheory){
         outer->bvTheory->analyze(conflict);
     }
+
     if(g_under.outfile()){
         std::sort(conflict.begin(), conflict.end());
         fprintf(g_under.outfile(), "toohigh ");
@@ -461,10 +482,24 @@ void MaxflowDetector<Weight, Graph>::analyzeMaxFlowLEQ(Weight flow, vec<Lit>& co
 #endif
         //g_over.drawFull(true);
         //learn_graph.drawFull(true);
-
-        Weight f = learn_cut->minCut(cut);
+        Weight f;
+        if (proof_support){
+            ignore_edge_id.clear();
+            f = learn_cut->minCut(cut, ignore_edge_id);
+            for(int i : ignore_edge_id){
+                reason_edges.push(i); 
+            }
+        }else{
+            f = learn_cut->minCut(cut);
+        }
+        
         learn_graph.clearChanged();
         learn_graph.clearHistory();
+        // if (proof_support){
+        //     for(int i : vi) {
+        //     reason_edges.push(edgeID);
+        //     }
+        // }
 
         /*				{
 
@@ -485,7 +520,7 @@ void MaxflowDetector<Weight, Graph>::analyzeMaxFlowLEQ(Weight flow, vec<Lit>& co
                 MaxFlowEdge e = cut[i];
                 int edgeID = e.id;//because we've doubled the set of edges in the learn graph relative to g_over/g_under.
                 Lit l = mkLit(outer->getEdgeVar(edgeID), false);
-
+                reason_edges.push(edgeID);
                 if(outer->value(l) == l_False){//it is possible for the edge to be enabled, but to be set to capacity 0.
                     bassert(outer->value(l) == l_False);
                     conflict.push(outer->toSolver(l));
@@ -498,7 +533,6 @@ void MaxflowDetector<Weight, Graph>::analyzeMaxFlowLEQ(Weight flow, vec<Lit>& co
                                                  g_over.getWeight(edgeID));
 
                     //outer->buildBVReason(outer->getEdgeBV(edgeID).getID(),Comparison::leq,g_over.getWeight(edgeID),conflict);
-
                 }
 
             }
@@ -506,6 +540,24 @@ void MaxflowDetector<Weight, Graph>::analyzeMaxFlowLEQ(Weight flow, vec<Lit>& co
             //there is no way to increase the max flow.
         }
 
+        if (proof_support){
+            //now find out the edge that need to be reported
+            for(int k = 0; k < reason_edges.size(); k++){
+                int edgeid = reason_edges[k];
+                if (outer->isvalidVar(edgeid)){
+                    int v = outer->getEdgeVar(edgeid);
+                    if(outer->value(v) != l_False){
+                        fprintf(proof_support, "%d ", g_over.getEdge(edgeid).from);
+                        fprintf(proof_support, "%d ", g_over.getEdge(edgeid).to);
+                        fprintf(proof_support, "flow ");
+                    }else{
+                        fprintf(proof_support, "%d ", g_over.getEdge(edgeid).from);
+                        fprintf(proof_support, "%d ", g_over.getEdge(edgeid).to);
+                        fprintf(proof_support, "edge ");
+                    }
+                }
+            }
+    }
         return;
     }
 
@@ -539,16 +591,27 @@ void MaxflowDetector<Weight, Graph>::analyzeMaxFlowLEQ(Weight flow, vec<Lit>& co
                             seen[p] = true;
                             visit.push(p);
                         }else{
-                            //if the edge _was_ enabled, and all of its capacity was used, then the reason that it didn't have more capacity must be included.
-                            if(outer->hasBitVector(edgeid) && !outer->getEdgeBV(edgeid).isConst()){
+                            reason_edges.push(edgeid);
+                            
+                            //reason_edges.push(g_over.getEdge(edgeid).from);
+                            //reason_edges.push(g_over.getEdge(edgeid).to);
+                            if(outer->hasBitVector(edgeid)){
                                 assert(g_over.getWeight(edgeid) == outer->getEdgeBV(edgeid).getOver());
-                                outer->bvTheory->addAnalysis(Comparison::leq, outer->getEdgeBV(edgeid).getID(),
-                                                             overapprox_conflict_detector->getEdgeFlow(edgeid));
+                                if (!outer->bvTheory->addAnalysis(Comparison::leq, outer->getEdgeBV(edgeid).getID(),
+                                                             overapprox_conflict_detector->getEdgeFlow(edgeid))){
+                                                            outer->bvTheory->analyzeValueReason(Comparison::leq, outer->getEdgeBV(edgeid).getID(),
+                                                             overapprox_conflict_detector->getEdgeFlow(edgeid), conflict);
+                                                             }
                                 //outer->buildBVReason(outer->getEdgeBV(edgeid).getID(),Comparison::leq,overapprox_conflict_detector->getEdgeFlow(edgeid),conflict);
-
                             }
                         }
                     }else{
+                        reason_edges.push(edgeid);
+                        /**if (proof_support){
+                                fprintf(proof_support, "%d ", g_over.getEdge(edgeid).from);
+                                fprintf(proof_support, "%d ", g_over.getEdge(edgeid).to);
+                                fprintf(proof_support, "edge ");
+                        }*/
                         //this is a disabled edge, and we can add it to the cut.
                         //we're going to assume the edge has non-zero capacity here, otherwise we could exclude it (but it shouldn't really even be in this graph in that case, anyways).
                         if(!g_over.isConstant(edgeid)){
@@ -559,6 +622,8 @@ void MaxflowDetector<Weight, Graph>::analyzeMaxFlowLEQ(Weight flow, vec<Lit>& co
                                             outer->buildBVReason(outer->getEdgeBV(edgeid).getID(),Comparison::leq,0,conflict);
                                         }
                                     }*/
+                        }else{
+                            conflict.push(outer->toSolver(mkLit(v, false)));
                         }
                     }
                 }
@@ -584,16 +649,33 @@ void MaxflowDetector<Weight, Graph>::analyzeMaxFlowLEQ(Weight flow, vec<Lit>& co
                         }else if(g_over.getWeight(edgeid) == 0){
                             //if the edge _was_ enabled, and it had no capacity capacity was used, then the reason that it didn't have more capacity must be included.
                             //does this really hold for backwards edges?
+                            /**if (proof_support){
+                                fprintf(proof_support, "%d ", g_under.getEdge(edgeid).from);
+                                fprintf(proof_support, "%d ", g_under.getEdge(edgeid).to);
+                                fprintf(proof_support, "flow ");
+                            }*/
+                            reason_edges.push(edgeid);
                             if(outer->hasBitVector(edgeid)){
-                                outer->bvTheory->addAnalysis(Comparison::leq, outer->getEdgeBV(edgeid).getID(), 0);
+                                if (!outer->bvTheory->addAnalysis(Comparison::leq, outer->getEdgeBV(edgeid).getID(), 0)){
+                                    outer->bvTheory->analyzeValueReason(Comparison::leq, outer->getEdgeBV(edgeid).getID(), 0, conflict);
+                                }
                                 //outer->buildBVReason(outer->getEdgeBV(edgeid).getID(),Comparison::leq,0,conflict);
                                 //outer->buildBVReason(bv.getID(),inclusive ? Comparison::gt:Comparison::geq,bv.getUnder(),conflict);
                             }
                         }
                     }else{
+                        reason_edges.push(edgeid);
+                        /**
+                        if (proof_support){
+                                fprintf(proof_support, "%d ", g_over.getEdge(edgeid).from);
+                                fprintf(proof_support, "%d ", g_over.getEdge(edgeid).to);
+                                fprintf(proof_support, "edge ");
+                        }*/
                         //this is a disabled edge, and we can add it to the cut.
                         //we're going to assume the edge has non-zero capacity here, otherwise we could exclude it (but it shouldn't really even be in this graph in that case, anyways).
                         if(!g_over.isConstant(edgeid)){
+                            conflict.push(outer->toSolver(mkLit(v, false)));
+                        }else{
                             conflict.push(outer->toSolver(mkLit(v, false)));
                         }
                     }
@@ -602,6 +684,25 @@ void MaxflowDetector<Weight, Graph>::analyzeMaxFlowLEQ(Weight flow, vec<Lit>& co
             //pred
         }
     }
+    if (proof_support){
+        //now find out the edge that need to be reported
+        for(int k = 0; k < reason_edges.size(); k++){
+            int edgeid = reason_edges[k];
+            if (seen[g_over.getEdge(edgeid).to] && !seen[g_over.getEdge(edgeid).from]){
+                int v = outer->getEdgeVar(edgeid);
+                if(outer->value(v) != l_False){
+                    fprintf(proof_support, "%d ", g_over.getEdge(edgeid).from);
+                    fprintf(proof_support, "%d ", g_over.getEdge(edgeid).to);
+                    fprintf(proof_support, "flow ");
+                }else{
+                    fprintf(proof_support, "%d ", g_over.getEdge(edgeid).from);
+                    fprintf(proof_support, "%d ", g_over.getEdge(edgeid).to);
+                    fprintf(proof_support, "edge ");
+                }
+            }
+        }
+    }
+
 
     while(visit.size()){
         seen[visit.last()] = false;
@@ -638,6 +739,7 @@ void MaxflowDetector<Weight, Graph>::buildMaxFlowTooLowReason(Weight maxflow, ve
         outer->bvTheory->analyze(conflict);
 
     }
+
 
     if(g_under.outfile()){
         std::sort(conflict.begin(), conflict.end());
@@ -682,6 +784,7 @@ void MaxflowDetector<Weight, Graph>::buildReason(Lit p, vec<Lit>& reason, CRef m
             outer->bvTheory->addAnalysis(f.inclusive ? Comparison::gt : Comparison::geq, bv.getID(), bv.getUnder());
             buildMaxFlowTooHighReason(bv.getOver(), reason);
         }
+        recordWitness(reason, p);
     }else if(marker == overprop_marker){
         reason.push(outer->toSolver(p));
 
@@ -701,6 +804,7 @@ void MaxflowDetector<Weight, Graph>::buildReason(Lit p, vec<Lit>& reason, CRef m
             outer->bvTheory->addAnalysis(f.inclusive ? Comparison::leq : Comparison::lt, bv.getID(), bv.getUnder());
             buildMaxFlowTooLowReason(bv.getUnder(), reason);
         }
+        recordWitness(reason, p);
 
     }else{
         assert(false);
@@ -762,6 +866,7 @@ bool MaxflowDetector<Weight, Graph>::propagate(vec<Lit>& conflict, bool backtrac
 
                     buildMaxFlowTooHighReason(maxflow, conflict);
                     conflict.push(outer->toSolver(l));
+                    recordWitness(conflict, l);
                     return false;
                 }
 
@@ -781,6 +886,7 @@ bool MaxflowDetector<Weight, Graph>::propagate(vec<Lit>& conflict, bool backtrac
 
                     buildMaxFlowTooLowReason(maxflow, conflict);
                     conflict.push(outer->toSolver(~l));
+                    recordWitness(conflict, ~l);
                     return false;
                 }
 
@@ -816,7 +922,7 @@ bool MaxflowDetector<Weight, Graph>::propagate(vec<Lit>& conflict, bool backtrac
                                                  computeUnderApprox(under_maxflow));
                     buildMaxFlowTooHighReason(bv.getOver(), conflict);
                     conflict.push(outer->toSolver(l));
-
+                    recordWitness(conflict, l);
                     return false;
                 }
 
@@ -842,6 +948,7 @@ bool MaxflowDetector<Weight, Graph>::propagate(vec<Lit>& conflict, bool backtrac
                                                  computeOverApprox(over_maxflow));
                     buildMaxFlowTooLowReason(bv.getUnder(), conflict);
                     conflict.push(outer->toSolver(~l));
+                    recordWitness(conflict, ~l);
                     return false;
                 }
 
@@ -863,6 +970,20 @@ bool MaxflowDetector<Weight, Graph>::propagate(vec<Lit>& conflict, bool backtrac
     }
     stats_total_prop_time += rtime(2) - start_prop_time;
     return true;
+}
+
+
+template<typename Weight, typename Graph>
+void
+MaxflowDetector<Weight, Graph>::FlowOp::analyzeReason0(bool compareOver, Comparison op, Weight to, vec<Lit>& conflict){
+//watch out - might need to backtrack the graph theory appropriately, here...
+    GraphTheorySolver<Weight>::GraphTheoryOp::analyzeReason(compareOver, op, to, conflict);
+    if(!compareOver){
+        outer->analyzeMaxFlowGEQ(to, conflict);
+    }else{
+        outer->analyzeMaxFlowLEQ(to, conflict);
+    }
+    GraphTheorySolver<Weight>::GraphTheoryOp::completeAnalysis();
 }
 
 template<typename Weight, typename Graph>

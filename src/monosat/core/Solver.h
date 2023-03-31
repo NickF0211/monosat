@@ -144,6 +144,45 @@ public:
             }
         }
     }
+    
+    //Binary DRUP
+    unsigned long theory_lemmas;
+    unsigned long lemmas;
+    static int buf_len;
+    static unsigned char drup_buf[];
+    static unsigned char* buf_ptr;
+
+    void byteDRUP(Lit l){
+        Lit newl = unmap(l);
+        unsigned int u = 2 * (var(newl) + 1) + sign(newl);
+        do{
+            *buf_ptr++ = u & 0x7f | 0x80; buf_len++;
+            u = u >> 7;
+        }while (u);
+        *(buf_ptr - 1) &= 0x7f; // End marker of this unsigned number.
+    }
+
+    template<class V>
+    void binDRUP(unsigned char op, const V& c, FILE* drup_file){
+        assert(op == 'a' || op == 'd' || op == 't');
+        *buf_ptr++ = op; buf_len++;
+        for (int i = 0; i < c.size(); i++) byteDRUP(c[i]);
+        *buf_ptr++ = 0; buf_len++;
+        if (buf_len > 1048576) binDRUP_flush(drup_file);
+    }
+
+    void binDRUP_strengthen(const Clause& c, Lit l, FILE* drup_file){
+        *buf_ptr++ = 'a'; buf_len++;
+        for (int i = 0; i < c.size(); i++)
+            if (c[i] != l) byteDRUP(c[i]);
+        *buf_ptr++ = 0; buf_len++;
+        if (buf_len > 1048576) binDRUP_flush(drup_file);
+    }
+
+    void binDRUP_flush(FILE* drup_file){
+        fwrite(drup_buf, sizeof(unsigned char), buf_len, drup_file);
+        buf_ptr = drup_buf; buf_len = 0;
+    }
 
     //Theory interface
     void addTheory(Theory* t) override{
@@ -824,6 +863,8 @@ public:
     std::map<std::string, Theory*> theorymap;
     // Mode of operation:
     //
+    FILE*     add_cnf;
+    bool lemma_verified = false;
     bool printed_header = false;
     int verbosity;
     double var_decay;
@@ -1018,6 +1059,7 @@ protected:
     // Solver state:
     //
     bool ok;            // If FALSE, the constraints are already unsatisfiable. No part of the solver state may be used!
+    vec<CRef> raw_clauses;  //List of raw clauses
     vec<CRef> clauses;          // List of problem clauses.
     vec<CRef> learnts;          // List of learnt clauses.
     double cla_inc;          // Amount to bump next clause with.
@@ -1071,6 +1113,7 @@ protected:
     vec<Lit> analyze_stack;
     vec<Lit> analyze_toclear;
     vec<Lit> add_tmp;
+    vec<Lit> add_oc;
 
     vec<vec<Lit>> clauses_to_add;
 
@@ -1146,6 +1189,9 @@ protected:
     //(In reality, the clause may be added to the database sometime later)
 
 public:
+
+    bool checkClauseRedundancy(vec<Lit>& ps);
+    void addRawClause(vec<Lit>& ps);
     void addClauseSafely(vec<Lit>& ps) override;
 
     void setTheoriesEnabled(bool enableTheories){
@@ -1254,6 +1300,17 @@ protected:
     // Operations on clauses:
     //
     CRef attachReasonClause(Lit r, vec<Lit>& ps);
+
+    void recordClauseInProofreason(CRef reason, const char mark);
+
+    template <class litVecs>
+    void recordClauseInProof(litVecs ps, const char mark);
+
+    template <class litVecs>
+    void recordClauseInProof(litVecs ps);
+    
+    template <class litVecs>
+    void deleteClauseInProof(litVecs ps);
 
     void attachClause(CRef cr);               // Attach a clause to watcher lists.
     void detachClause(CRef cr, bool strict = false); // Detach a clause to watcher lists.

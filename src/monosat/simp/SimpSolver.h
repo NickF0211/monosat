@@ -161,6 +161,7 @@ public:
 
     // Mode of operation:
     //
+    bool parsing;
     int grow;              // Allow a variable elimination step to grow by a number of clauses (default to zero).
     int clause_lim;        // Variables are not eliminated if it produces a resolvent with a length above this limit.
     // -1 means no limit.
@@ -234,6 +235,7 @@ protected:
     int bwdsub_assigns;
     int n_touched;
 
+    vec<Lit> implied_lits;
     // Temporaries:
     //
     CRef bwdsub_tmpunit;
@@ -301,7 +303,10 @@ inline bool SimpSolver::addClause(Lit p){
     cancelUntil(0);
     add_tmp.clear();
     add_tmp.push(p);
-    return addClause_(add_tmp);
+    parsing = false;
+    bool res = addClause_(add_tmp);
+    parsing = true;
+    return res;
 }
 
 inline bool SimpSolver::addClause(Lit p, Lit q){

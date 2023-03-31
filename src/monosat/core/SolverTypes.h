@@ -343,6 +343,8 @@ public:
 
     void strengthen(Lit p);
 
+    void strengthen(vec<Lit>& ps);
+
     //stl-style begin and end, to support C++11 range-based for loops
     const Lit* begin() const{
         return &data[0].lit;
@@ -639,6 +641,13 @@ inline Lit Clause::subsumes(const Clause& other) const{
 
 inline void Clause::strengthen(Lit p){
     remove(*this, p);
+    calcAbstraction();
+}
+
+inline void Clause::strengthen(vec<Lit>& ps){
+    for(int i = 0; i < ps.size(); i++){
+        remove(*this, ps[i]);
+    }
     calcAbstraction();
 }
 

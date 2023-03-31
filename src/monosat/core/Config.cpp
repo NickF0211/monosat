@@ -101,7 +101,20 @@ BoolOption Monosat::opt_debug_model(_cat, "debug-model", "", false);
 
 StringOption Monosat::opt_debug_learnt_clauses(_cat, "debug-learnts",
                                                "Write all learned clauses to the following file (empty string (recommended) disables)", "");
+
+StringOption Monosat::opt_proof_support(_cat, "proof-support",
+                                               "write proof hint to the following file", "");
+
+StringOption Monosat::opt_drup_file(_cat, "drup-file",
+                                               "write proof into the following file", "");
+
+StringOption Monosat::opt_cnf_file(_cat, "cnf-file",
+                                               "write extra cnf encoding into the following file", "");
+
 FILE* Monosat::opt_write_learnt_clauses = nullptr;
+FILE* Monosat::proof_support = nullptr;
+FILE* Monosat::drup_file = nullptr;
+FILE* Monosat::cnf_file = nullptr;
 
 //StringOption Monosat::StringOption opt_fsm_model(_cat_fsm,"File to write fsm model, if fsm theory is used","","");
 

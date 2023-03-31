@@ -130,7 +130,8 @@ public:
                           typename BVTheorySolver<Weight>::Cause& over_cause_new) override{
             ;
         }
-
+        
+        void analyzeReason0(bool compareOver, Comparison op, Weight to, vec<Lit>& conflict) override;
         void analyzeReason(bool compareOver, Comparison op, Weight to, vec<Lit>& conflict) override;
 
         bool checkSolved() override{

@@ -96,6 +96,7 @@ public:
     bool all_edges_positive = true;
     bool has_any_bitvector_edges = false;
     vec<lbool> assigns;
+    vec<lbool> assigns_verify;
     MSTDetector<Weight>* mstDetector = nullptr;
     struct ReachabilityConstraint {
         int from;
@@ -840,6 +841,14 @@ public:
         return v;
     }
 
+    inline int isvalidVar(int edgeID){
+        if (edgeID < edge_list.size()){
+            Var v = edge_list[edgeID].v;
+            return (v < vars.size()) && (vars[v].isEdge);
+        }
+        return false;
+    }
+
     /**
 	 * Check if the given literal belongs to this theory, and also if it is an edge var or a property var
 	 * @param solverLit
@@ -1007,6 +1016,7 @@ public:
         vars[v].theory_var = var_Undef;
 
         assigns.push(l_Undef);
+        assigns_verify.push(l_Undef);
         trail.growTo(v + 1);
         S->setTheoryVar(solverVar, getTheoryIndex(), v);
         assert(toSolver(v) == solverVar);
@@ -1058,6 +1068,7 @@ public:
         vars[v].theory_var = theoryVar;
         trail.growTo(v + 1);
         assigns.push(l_Undef);
+        assigns_verify.push(l_Undef);
         return v;
     }
 
@@ -1084,6 +1095,7 @@ public:
         vars[v].theory_var = var_Undef;
         trail.growTo(v + 1);
         assigns.push(l_Undef);
+        assigns_verify.push(l_Undef);
 
         if(connectToTheory){
             S->setTheoryVar(solverVar, getTheoryIndex(), v);
@@ -1171,6 +1183,24 @@ public:
 
     inline lbool value(Lit l) const override{
         return assigns[var(l)] ^ sign(l);
+    }
+
+    inline void add_verify_value(vec<Lit>& conflict){
+        for (int i=0; i < conflict.size(); i++){
+            Lit l = conflict[i];
+            assigns_verify[var(l)] = sign(l) ? l_True : l_False;
+        }
+    }
+
+    inline void clear_verify_value(vec<Lit>& conflict){
+         for (int i=0; i < conflict.size(); i++){
+            Lit l = conflict[i];
+            assigns_verify[var(l)] = l_Undef;
+        }
+    }
+
+    inline lbool value_verify(Var v){
+        return assigns_verify[v];
     }
 
     inline lbool dbg_value(Var v){

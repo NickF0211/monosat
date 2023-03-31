@@ -87,6 +87,10 @@ public:
 
     virtual const Weight minCut(std::vector<MaxFlowEdge>& cut) = 0;
 
+    virtual const Weight minCut(std::vector<MaxFlowEdge>& cut, std::vector<int>& reasons){
+        return minCut(cut);
+    }
+    
     //Return a valid cut that may or may not be the mincut.
     virtual const Weight approxMinCut(std::vector<MaxFlowEdge>& cut){
         return minCut(cut);

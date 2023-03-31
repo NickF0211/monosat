@@ -81,7 +81,7 @@ public:
                           typename BVTheorySolver<Weight>::Cause& over_cause_new) override{
             ;
         }
-
+        void analyzeReason0(bool compareOver, Comparison op, Weight to, vec<Lit>& conflict) override;
         void analyzeReason(bool compareOver, Comparison op, Weight to, vec<Lit>& conflict) override;
 
         bool checkSolved() override{
@@ -133,6 +133,7 @@ public:
     std::vector<int> q;
 
     Graph learn_graph;
+    vec<int> reason_edges;
     vec<int> back_edges;
     int learngraph_history_qhead = 0;
     int learngraph_history_clears = -1;
@@ -158,6 +159,7 @@ public:
     int n_satisfied_lits = 0;
 
     std::vector<MaxFlowEdge> cut;
+    std::vector<int> ignore_edge_id;
 
     vec<MaxFlowEdge> tmp_cut;
     vec<int> visit;
@@ -171,6 +173,19 @@ public:
     void backtrack(int level) override{
         to_decide.clear();
         last_decision_status = -1;
+    }
+
+    void recordWitness(vec<Lit>& conflict, Lit l){
+        //include edges contain non-zero flows
+        if (proof_support){
+            fprintf(proof_support, "%i ", dimacs(outer->unmap(outer->toSolver(l))));
+            fprintf(proof_support, "0 ");
+            fprintf(proof_support, "MF witness ");
+            for (int i = 0; i < conflict.size(); i++)
+                fprintf(proof_support, "%i ", dimacs(outer->unmap(conflict[i])));
+            fprintf(proof_support, "0\n");
+        }
+        reason_edges.clear();
     }
 
     void collectChangedEdges();

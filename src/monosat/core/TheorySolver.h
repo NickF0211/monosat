@@ -93,7 +93,7 @@ public:
     virtual Var newVar(bool polarity = true, bool dvar = true) = 0;
 
     virtual int nVars() const = 0;
-
+    
     virtual bool enqueue(Lit l, CRef reason = CRef_Undef) = 0;
 
     virtual CRef newReasonMarker(Heuristic* forTheory, bool is_decision = false) = 0;

@@ -32,6 +32,12 @@ using namespace Monosat;
 #ifndef NDEBUG
 #define DEBUG_SOLUTION
 #endif
+
+//#ifdef BIN_DRUP
+int Solver::buf_len = 0;
+unsigned char Solver::drup_buf[2 * 1024 * 1024];
+unsigned char* Solver::buf_ptr = drup_buf;
+
 //=================================================================================================
 // Options:
 // Collected in Config.h
@@ -42,7 +48,8 @@ bool Solver::shown_warning = false;
 Solver::Solver() :
 
 // Parameters (user settable):
-//
+//      
+        add_cnf          (NULL),
         verbosity(opt_verb), var_decay(opt_var_decay), clause_decay(opt_clause_decay), theory_decay(opt_var_decay),
         random_var_freq(
                 opt_random_var_freq), random_seed(opt_random_seed), luby_restart(opt_luby_restart), ccmin_mode(
@@ -66,7 +73,7 @@ Solver::Solver() :
         true), cla_inc(1), var_inc(1), theory_inc(1), watches(WatcherDeleted(ca)), qhead(0), simpDB_assigns(-1),
         simpDB_props(
                 0), order_heap(VarOrderLt(activity, priority)), theory_order_heap(HeuristicOrderLt(), HeuristicToInt()),
-        progress_estimate(0), remove_satisfied(true) //lazy_heap( LazyLevelLt(this)),
+        progress_estimate(0), remove_satisfied(true), theory_lemmas(0), lemmas(0) //lazy_heap( LazyLevelLt(this)),
 
         // Resource constraints:
         //
@@ -183,6 +190,11 @@ bool Solver::addClause_(vec<Lit>& ps, bool is_derived_clause){
     sort(ps);
     Lit p;
     int i, j;
+
+    if (drup_file){
+        add_oc.clear();
+        for (int i = 0; i < ps.size(); i++) add_oc.push(ps[i]); }
+
     for(i = j = 0, p = lit_Undef; i < ps.size(); i++)
         if(value(ps[i]) == l_True || ps[i] == ~p)
             return true;
@@ -190,6 +202,15 @@ bool Solver::addClause_(vec<Lit>& ps, bool is_derived_clause){
             ps[j++] = p = ps[i];
     ps.shrink(i - j);
     checkClause(ps);
+
+     if (drup_file && i != j){
+        lemmas += 1;
+        recordClauseInProof <vec<Lit>&> (ps);
+        deleteClauseInProof <vec<Lit>&> (add_oc);
+        add_oc.clear();
+    }
+
+
     if(ps.size() == 0)
         return ok = false;
     else if(ps.size() == 1){
@@ -220,6 +241,14 @@ CRef Solver::attachReasonClause(Lit r, vec<Lit>& ps){
         fprintf(opt_write_learnt_clauses, " 0\n");
         fflush(opt_write_learnt_clauses);
     }
+    
+    if (drup_file){
+        recordClauseInProof <vec<Lit>&> (ps, 't');
+        theory_lemmas += 1;
+        lemmas += 1;
+        add_oc.clear();
+        for (int i = 0; i < ps.size(); i++) add_oc.push(ps[i]); 
+    }
 
     //sort(ps);
     Lit p;
@@ -230,7 +259,12 @@ CRef Solver::attachReasonClause(Lit r, vec<Lit>& ps){
         else if((value(ps[i]) != l_False || level(var(ps[i])) != 0) && ps[i] != p)
             ps[j++] = p = ps[i];
     ps.shrink(i - j);
-
+    
+    if (i != j && drup_file){
+        lemmas += 1;
+        recordClauseInProof <vec<Lit>&> (ps);
+        deleteClauseInProof<vec<Lit>&> (add_oc);
+    }
     CRef confl_out = CRef_Undef;
     if(ps.size() == 0){
         ok = false;
@@ -307,6 +341,44 @@ CRef Solver::attachReasonClause(Lit r, vec<Lit>& ps){
     }
 }
 
+void Solver::recordClauseInProofreason(CRef reason, const char mark){
+    if (drup_file){
+        const Clause& c = ca[reason];
+        // fprintf(drup_file, "%c ", mark);
+        // for (int i = 0; i < c.size(); i++)
+        //     fprintf(drup_file, "%i ", dimacs(unmap(c[i])));
+        // fprintf(drup_file, "0\n");
+        binDRUP(mark, c, drup_file);
+    }
+}
+
+template <class litVecs>
+void Solver::recordClauseInProof(litVecs ps, const char mark){
+    // fprintf(drup_file, "%c ", mark);
+    // for (int i = 0; i < ps.size(); i++)
+    //     printf("%i ", dimacs(unmap(ps[i])));
+    // printf("0\n");
+    binDRUP(mark, ps, drup_file);
+}
+
+template <class litVecs>
+void Solver::recordClauseInProof(litVecs ps){
+    // for (int i = 0; i < ps.size(); i++)
+    //     fprintf(drup_file, "%i ", dimacs(unmap(ps[i])));
+    // fprintf(drup_file, "0\n");
+    binDRUP('a', ps, drup_file);
+}
+
+template <class litVecs>
+void Solver::deleteClauseInProof(litVecs ps){
+    // fprintf(drup_file, "%c ", 'd');
+    // for (int i = 0; i < ps.size(); i++)
+    //     fprintf(drup_file, "%i ", dimacs(unmap(ps[i])));
+    // fprintf(drup_file, "0\n");
+    binDRUP('d', ps, drup_file);
+}
+
+
 void Solver::attachClause(CRef cr){
     const Clause& c = ca[cr];
     assert(c.size() > 1);
@@ -324,7 +396,7 @@ void Solver::attachClause(CRef cr){
                         break;
                     }
                 }
-                assert(found);
+                //assert(found);
             }
         }
 #endif
@@ -358,6 +430,12 @@ void Solver::detachClause(CRef cr, bool strict){
 void Solver::removeClause(CRef cr){
     CRef remove_clause = cr;
     Clause& c = ca[cr];
+    if (drup_file){
+        if (c.mark() != 1){
+            deleteClauseInProof <Clause&>   (c);
+        }else
+            printf("c Bug: removeClause(). I don't expect this to happen.\n");
+    }
     detachClause(cr);
     // Don't leave pointers to free'd memory!
     if(locked(c))
@@ -1364,6 +1442,7 @@ CRef Solver::propagate(bool propagate_theories){
                 // Did not find watch -- clause is unit under assignment:
                 *j++ = w;
                 if(value(first) == l_False){
+                    lemma_verified = true;
                     confl = cr;
                     qhead = trail.size();
                     // Copy the remaining watches:
@@ -1458,6 +1537,7 @@ bool Solver::propagateTheorySolver(int theoryID, CRef& confl, vec<Lit>& theory_c
 
     if(!theories[theoryID]->propagateTheory(theory_conflict)){
         bool has_conflict = true;
+        lemma_verified = true;
 #ifdef DEBUG_CORE
         for(Lit l:theory_conflict)
             assert(value(l) != l_Undef);
@@ -1726,6 +1806,34 @@ bool Solver::simplify(){
     return true;
 }
 
+bool Solver::checkClauseRedundancy(vec<Lit>& ps){
+    lemma_verified = false;
+    newDecisionLevel();
+    for(int i=0; i< ps.size(); i++){
+        Lit l = ps[i];
+        if (value(~l) == l_True){
+            continue;
+        }
+        if (value(~l) == l_Undef){
+            uncheckedEnqueue(~l);
+        }else{
+            //already conflicting with forced literals
+            return true;
+        }
+       
+    }
+    CRef confl = propagate(true);
+    cancelUntil(0);
+    return confl != CRef_Undef || lemma_verified;
+}
+
+
+void Solver::addRawClause(vec<Lit>& ps){
+    CRef c = ca.alloc(ps);
+    raw_clauses.push(c);
+}
+
+
 void Solver::addClauseSafely(vec<Lit>& ps){
     if(opt_write_learnt_clauses){
         fprintf(opt_write_learnt_clauses, "learnt fact ");
@@ -1736,7 +1844,24 @@ void Solver::addClauseSafely(vec<Lit>& ps){
         fflush(opt_write_learnt_clauses);
     }
 
+    // if (drup_file){
+    //     recordClauseInProof <vec<Lit>&> (ps, 't');
+    //     add_oc.clear();
+    //     for (int i = 0; i < ps.size(); i++) add_oc.push(ps[i]);
+    // }
+    
+    // if (cnf_file){
+    //     for(Lit l:ps){
+    //         fprintf(cnf_file, " %d", dimacs(unmap(l)));
+    //     }
+    //     fprintf(cnf_file, " 0\n");
+    // }
+
     if(decisionLevel() == 0){
+        // if (add_cnf){
+        //    addRawClause(ps);
+        // }
+
         addClause_(ps, true);
     }else{
 
@@ -1761,6 +1886,14 @@ void Solver::addClauseSafely(vec<Lit>& ps){
             }
         }
         ps.shrink(i - j);
+
+        if (drup_file && i != j){
+            lemmas += 1;
+            recordClauseInProof <vec<Lit>&> (ps);
+            deleteClauseInProof <vec<Lit>&> (add_oc);
+            add_oc.clear();
+        }
+
         if(false_count == ps.size() - 1){
             //this clause is unit under the current assignment.
             //although we _could_ wait until a restart to add this clause, in many cases this will lead to very poor solver behaviour.
@@ -1842,6 +1975,14 @@ bool Solver::addConflictClause(vec<Lit>& ps, CRef& confl_out, bool permanent){
         fprintf(opt_write_learnt_clauses, " 0\n");
         fflush(opt_write_learnt_clauses);
     }
+    
+    if (drup_file){
+            add_oc.clear();
+            recordClauseInProof <vec<Lit>&> (ps, 't');
+            theory_lemmas += 1;
+            lemmas += 1;
+            for (int i = 0; i < ps.size(); i++) add_oc.push(ps[i]); 
+    }
 
     sort(ps);
     Lit p;
@@ -1857,6 +1998,14 @@ bool Solver::addConflictClause(vec<Lit>& ps, CRef& confl_out, bool permanent){
     }
     ps.shrink(i - j);
     confl_out = CRef_Undef;
+
+    if (i != j && drup_file){
+            lemmas += 1;
+            recordClauseInProof <vec<Lit>&> (ps);
+            deleteClauseInProof <vec<Lit>&> (add_oc);
+            add_oc.clear();
+    }
+
     if(ps.size() == 0){
         ok = false;
         cancelUntil(0);
@@ -2314,6 +2463,11 @@ lbool Solver::search(int nof_conflicts){
                     conflicting_heuristic = nullptr;
                     return l_False;
                 }
+            }
+
+            if (drup_file){
+                lemmas += 1;
+                recordClauseInProof <vec<Lit>&> (learnt_clause);
             }
             if(conflicting_heuristic){
                 theoryBumpActivity(conflicting_heuristic);
@@ -2904,6 +3058,10 @@ lbool Solver::solve_(){
         }else{
             override_restart_count = -1;
         }
+    }
+
+    if (drup_file && status == l_False){ 
+        binDRUP_flush(drup_file);
     }
 
     if(status == l_True){

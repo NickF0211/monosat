@@ -51,6 +51,7 @@ static DoubleOption opt_simp_garbage_frac(_cat, "monosat/simp-gc-frac",
 // Constructor/Destructor:
 
 SimpSolver::SimpSolver() :
+        parsing(false),
         grow(opt_grow), clause_lim(opt_clause_lim), subsumption_lim(opt_subsumption_lim), simp_garbage_frac(
         opt_simp_garbage_frac), use_asymm(opt_use_asymm), use_rcheck(opt_use_rcheck), use_elim(opt_use_elim), merges(
         0), asymm_lits(0), eliminated_vars(0), elimorder(1), use_simplification(true), occurs(
@@ -160,9 +161,17 @@ bool SimpSolver::addClause_(vec<Lit>& ps, bool is_derived_clause){
 
     if(use_rcheck && implied(ps))
         return true;
-
+        
+    if (!parsing && drup_file) {
+        // for (int i = 0; i < ps.size(); i++)
+        //     fprintf(drup_file, "%i ", dimacs(unmap(ps[i])));
+        // fprintf(drup_file, "0\n");
+        lemmas += 1;
+        binDRUP('a', ps, drup_file);
+    }
     if(!Solver::addClause_(ps, is_derived_clause))
         return false;
+
 
     if(use_simplification && clauses.size() == nclauses + 1){
         CRef cr = clauses.last();
@@ -210,46 +219,33 @@ bool SimpSolver::strengthenClause(CRef cr, Lit l){
     // if (!find(subsumption_queue, &c))
     subsumption_queue.insert(cr);
 
+    if (drup_file){
+        // for (int i = 0; i < c.size(); i++)
+        //     if (c[i] != l){
+        //          fprintf(drup_file, "%i ", dimacs(unmap(c[i])));
+        //     }
+        // fprintf(drup_file, "0\n");
+        lemmas += 1;
+        binDRUP_strengthen(c, l, drup_file);
+    }
     if(c.size() == 2){
         removeClause(cr);
         c.strengthen(l);
     }else{
+        if (drup_file){
+            // fprintf(drup_file, "%c ", 'd');
+            // for (int i = 0; i < c.size(); i++)
+            //     fprintf(drup_file, "%i ", dimacs(unmap(c[i])));
+            // fprintf(drup_file, "0\n");
+            binDRUP('d', c, drup_file);
+        }
         detachClause(cr, true);
-        int size = c.size();
-        //remove any false lits from this clause
-        for(int i = 0; i < c.size(); i++){
-            Lit lit = c[i];
-            if(lit != l){
-                if(value(lit) == l_False){
-                    size--;
-                    i--;
-                    c.strengthen(lit);    //can do this more efficiently, obviously...
-                }else if(value(lit) == l_True){
-                    size = -1;
-                    removeClause(cr);
-                    break;
-                }
-            }
-        }
-        if(size == -1){
-            return true;
-        }else if(size == 0){
-            ok = false;
-            return false;
-        }else if(size == 1){
-            ok = false;
-            c.strengthen(l);
-            return false;
-        }else if(size == 2){
-            removeClause(cr);
-            c.strengthen(l);
-        }else{
-            c.strengthen(l);
-            attachClause(cr);
-            remove(occurs[var(l)], cr);
-            n_occ[toInt(l)]--;
-            updateElimHeap(var(l));
-        }
+        c.strengthen(l);
+        attachClause(cr);
+        remove(occurs[var(l)], cr);
+        n_occ[toInt(l)]--;
+        updateElimHeap(var(l));
+        
     }
 
     return c.size() == 1 ?
@@ -542,7 +538,6 @@ bool SimpSolver::eliminateVar(Var v){
     bool all_derived = true;
     for(int i = 0; i < cls.size(); i++){
         all_derived &= ca[cls[i]].derivedClause();
-        removeClause(cls[i]);
     }
     // Produce clauses in cross product:
     vec<Lit>& resolvent = add_tmp;
@@ -552,6 +547,9 @@ bool SimpSolver::eliminateVar(Var v){
                !addClause_(resolvent, all_derived))//should this clause always be treated as derived?
                 return false;
 
+    
+    for (int i = 0; i < cls.size(); i++)
+        removeClause(cls[i]); 
     // Free occurs list for this variable:
     occurs[v].clear(true);
 
