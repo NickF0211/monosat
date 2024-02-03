@@ -393,8 +393,13 @@ public:
                     //propagationtime += startconftime - startproptime;
                     //this is already a conflict;
                     analyzeValueReason(Comparison::geq, bvID, underApprox, conflict);
+                    if (proof_support){
+                        fprintf(proof_support, "#%d;", conflict.size());
+                    }
                     analyzeValueReason(Comparison::leq, bvID, overApprox, conflict);
-
+                    if (proof_support){
+                        fprintf(proof_support, "#%d;", conflict.size());
+                    }
                     analyze(conflict);
 
                     theory.stats_conflict_time += rtime(2) - startconftime;
@@ -429,7 +434,9 @@ public:
                                 printf("bv bit conflict %" PRId64 "\n", theory.stats_num_conflicts);
                             }
                             theory.buildComparisonReason(Comparison::leq, bvID, overApprox, conflict);
-
+                            if (proof_support){
+                                fprintf(proof_support, "#%d;", conflict.size());
+                            }
                             theory.stats_conflict_time += rtime(2) - startconftime;
                             return false;
 
@@ -455,7 +462,9 @@ public:
                                 printf("bv bit conflict %" PRId64 "\n", theory.stats_num_conflicts);
                             }
                             theory.buildComparisonReason(Comparison::geq, bvID, underApprox, conflict);
-
+                             if (proof_support){
+                                fprintf(proof_support, "#%d;", conflict.size());
+                            }
                             theory.stats_conflict_time += rtime(2) - startconftime;
                             return false;
 
@@ -475,6 +484,9 @@ public:
                                     }
                                 }
                                 analyzeValueReason(Comparison::geq, bvID, underApprox, conflict);
+                                if (proof_support){
+                                    fprintf(proof_support, "#%d;", conflict.size());
+                                }
                                 conflict.push(toSolver(l));
                                 theory.S->addClauseSafely(conflict);
                                 conflict.clear();
@@ -491,6 +503,9 @@ public:
                                     }
                                 }
                                 analyzeValueReason(Comparison::leq, bvID, overApprox, conflict);
+                                if (proof_support){
+                                    fprintf(proof_support, "#%d;", conflict.size());
+                                }
                                 conflict.push(toSolver(~l));
                                 theory.S->addClauseSafely(conflict);
                                 conflict.clear();
@@ -623,6 +638,12 @@ public:
                                 reason.push(toSolver(bv[j]));
                             }
                         }
+                        if (proof_support){
+                            std::stringstream ss;
+                            ss << (underApprox - 1);
+                            fprintf(proof_support, "bv %d <= %s,", theory.unmapBV(bvID), ss.str().c_str());
+                            fprintf(proof_support, "#%d;", reason.size());
+                        }
                         theory.buildComparisonReason(Comparison::geq, bvID, underApprox, reason);
                         break;
 
@@ -636,6 +657,12 @@ public:
                             if(val == l_True){
                                 reason.push(toSolver(~bv[j]));
                             }
+                        }
+                        if (proof_support){
+                            std::stringstream ss;
+                            ss << (overApprox + 1);
+                            fprintf(proof_support, "bv %d >= %s,", theory.unmapBV(bvID), ss.str().c_str());
+                            fprintf(proof_support, "#%d;", reason.size());
                         }
                         theory.buildComparisonReason(Comparison::leq, bvID, overApprox, reason);
                         break;
@@ -2326,10 +2353,17 @@ public:
                 conflict.push(toSolver(~l));
 
                 if(compare_over){
+                    //need to
                     analyzeValueReason(Comparison::leq, compareID, over_approx0[compareID], conflict);
+                    if (proof_support){
+                        fprintf(proof_support, "#%d;", conflict.size());
+                    }
                     //buildValueReason(Comparison::leq,c.compareID, over_approx[c.compareID],conflict,trail_pos-1);
                 }else{
                     analyzeValueReason(Comparison::geq, compareID, under_approx0[compareID], conflict);
+                    if (proof_support){
+                        fprintf(proof_support, "#%d;", conflict.size());
+                    }
                     //buildValueReason(Comparison::geq,c.compareID, under_approx[c.compareID],conflict,trail_pos-1);
                 }
 
@@ -2338,8 +2372,14 @@ public:
                 conflict.push(toSolver(l));
                 if(compare_over){
                     analyzeValueReason(Comparison::leq, compareID, over_approx0[compareID], conflict);
+                    if (proof_support){
+                        fprintf(proof_support, "#%d;", conflict.size());
+                    }
                 }else{
                     analyzeValueReason(Comparison::geq, compareID, under_approx0[compareID], conflict);
+                    if (proof_support){
+                        fprintf(proof_support, "#%d;", conflict.size());
+                    }
                 }
             }
 
@@ -2366,9 +2406,9 @@ public:
                 assert(value(l) == l_False);
                 conflict.push(toSolver(l));
                 if(compare_over){
-                    addAnalysis(Comparison::leq, compareID, over_approx[compareID]);
+                        addAnalysis(Comparison::leq, compareID, over_approx[compareID]); 
                 }else{
-                    addAnalysis(Comparison::geq, compareID, under_approx[compareID]);
+                        addAnalysis(Comparison::geq, compareID, under_approx[compareID]);
                 }
             }
 
@@ -4045,21 +4085,26 @@ public:
                 Weight under_argID = under_approx[other_argID];
 
                 //Weight over = over_approx[sumID] -  under_approx[other_argID];
-
+                if (proof_support){
+                    fprintf(proof_support, ":%d=%d+;", sumID, other_argID);
+                }
                 addAnalysis(Comparison::geq, other_argID, over_sumID - over_approx[bvID]);
                 addAnalysis(Comparison::leq, sumID, over_approx[bvID] + under_argID);
+                
                 //buildValueReason(~op,other_argID,over_sumID-to,conflict,trail_pos-1);
                 //buildValueReason(op,sumID,to+under_argID,conflict,trail_pos-1);
-
             }else{
-
                 int other_argID = otherOp->bvID;
                 int sumID = resultOp->bvID;
                 Weight under_sumID = under_approx[sumID];
                 Weight over_argID = over_approx[other_argID];
                 //Weight under = under_approx[sumID] -  over_approx[other_argID];
+                if (proof_support){
+                    fprintf(proof_support, ":%d=%d+;", sumID, other_argID);
+                }
                 addAnalysis(Comparison::leq, other_argID, under_sumID - under_approx[bvID]);
                 addAnalysis(Comparison::geq, sumID, under_approx[bvID] + over_argID);
+                
                 //buildValueReason(~op,other_argID,under_sumID-to,conflict,trail_pos-1);
                 //buildValueReason(op,sumID,to+over_argID,conflict,trail_pos-1);
             }
@@ -6751,6 +6796,13 @@ public:
         assert(hasOperation(p));
         Operation& op = getOperation(p);
         op.buildReason(p, marker, reason);
+         if (proof_support){
+            fprintf(proof_support, "BVW");
+            for(int i = 0; i < reason.size(); i++){
+                fprintf(proof_support, "%d ", dimacs(S->unmap(reason[i])));
+            }
+            fprintf(proof_support, "0\n");
+        }
         //note: the reason has already been transformed into the solvers variable namespace at this point,
         //do _not_ call 'toSolver' again
 
@@ -7416,7 +7468,15 @@ public:
     }
 
     bool propagateTheory(vec<Lit>& conflict) override{
-        return propagateTheory(conflict, false);
+        bool result = propagateTheory(conflict, false);
+        if (!result && proof_support){
+            fprintf(proof_support, "BVW");
+            for(int i = 0; i < conflict.size(); i++){
+                fprintf(proof_support, "%d ", dimacs(S->unmap(conflict[i])));
+            }
+            fprintf(proof_support, "0\n");
+        }
+        return result;
     }
 
     bool propagateTheory(vec<Lit>& conflict, bool force_propagation, bool isSolveCheck = false){
@@ -7696,6 +7756,11 @@ public:
             // a constant bitvector needs no reason
             return;
         }*/
+        if (proof_support){
+            std::stringstream ss;
+            ss << op << " " << to;
+            fprintf(proof_support, "bv %d %s,",unmapBV(bvID), ss.str().c_str());
+        }
         while(eq_bitvectors[bvID] != bvID)
             bvID = eq_bitvectors[bvID];
         writeBounds(bvID);
@@ -7919,7 +7984,7 @@ public:
         }
         //add this to bv comparison to the stack of analyses to perform.
         if(compare_over){
-            if(to >= over_approx0[bvID]){
+            if(!proof_support&& to >= over_approx0[bvID]){
                 //std::cout << to << " >=" << over_approx0[bvID];
                 return false;//no analysis required.
             }
@@ -7961,7 +8026,7 @@ public:
                 pending_over_analyses[bvID] = aID;
             }
         }else{
-            if(to <= under_approx0[bvID])
+            if(!proof_support && to <= under_approx0[bvID])
                 //std::cout << to << " <" << over_approx0[bvID];
                 return false;//no analysis required.
             //need to check whether this analysis has already been requested for this bitvector, and if not, insert it into the analysis chain in the right position.
@@ -8016,6 +8081,9 @@ public:
         int trail_pos = rewindUntil(bvID, op, to);
         //analyses.push({bvID,op,conflict});
         analyzeValueReason(op, bvID, to, conflict);
+        if (proof_support){
+            fprintf(proof_support, "#%d;", conflict.size());
+        }
         analyze(conflict);
     }
 
@@ -8045,6 +8113,9 @@ public:
                     n_pending_analyses--;
                     analyses[aID].clear();
                     analyzeValueReason(Comparison::leq, bvID, w, conflict);
+                    if (proof_support){
+                        fprintf(proof_support, "#%d;", conflict.size());
+                    }
                 }
                 while(pending_under_analyses[bvID] > -1 &&
                       e.previous_under < analyses[pending_under_analyses[bvID]].value){
@@ -8057,6 +8128,9 @@ public:
                     n_pending_analyses--;
                     analyses[aID].clear();
                     analyzeValueReason(Comparison::geq, bvID, w, conflict);
+                    if (proof_support){
+                        fprintf(proof_support, "#%d;", conflict.size());
+                    }
                 }
             }
             rewind_trail_pos(analysis_trail_pos - 1);

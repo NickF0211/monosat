@@ -354,10 +354,10 @@ void Solver::recordClauseInProofreason(CRef reason, const char mark){
 
 template <class litVecs>
 void Solver::recordClauseInProof(litVecs ps, const char mark){
-    // fprintf(drup_file, "%c ", mark);
+    fprintf(drup_file, "%c ", mark);
     // for (int i = 0; i < ps.size(); i++)
-    //     printf("%i ", dimacs(unmap(ps[i])));
-    // printf("0\n");
+    //     fprintf(drup_file, "%i ", dimacs(unmap(ps[i])));
+    // fprintf(drup_file, "0\n");
     binDRUP(mark, ps, drup_file);
 }
 
